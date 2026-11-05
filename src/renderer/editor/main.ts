@@ -24,6 +24,7 @@ import {
 import { AgentBridge, type HtmlSyncOutcome } from './agentBridge.js';
 import { AgentPanel } from './agentPanel.js';
 import { createDeckWerkButton } from './aboutDialog.js';
+import { createThemeToggle } from './themeToggle.js';
 import { installUpdates } from './updateDialog.js';
 import { trackPreviewFrameRecovery } from '../player/previewFrameRecovery.js';
 import { CANVAS_NOTICE_EVENT, EditorCanvas } from './canvas.js';
@@ -592,6 +593,7 @@ function buildToolbar(): void {
     if (!remoteConnected) agentSessionBridge?.reconnectNow();
   });
   left.append(
+    createThemeToggle(),
     createDeckWerkButton(),
     deckNameLabel,
     remoteChip,

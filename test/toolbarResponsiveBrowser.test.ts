@@ -87,10 +87,11 @@ describe.skipIf(!electronBinary)('responsive desktop toolbar', () => {
 
     // The File menu carries New / Open / Import / Save As at every width, so
     // a medium window keeps Insert centred and simply drops the deck name.
-    // (Medium is 1200: History beside the deck name, and the Pen and Media
-    // on the Insert bar, made both outer groups and Insert wider.)
+    // (Medium is 1260: History beside the deck name, the light/dark toggle
+    // before the wordmark, and the Pen and Media on the Insert bar made both
+    // outer groups and Insert wider.)
     const insert = ['Text', 'Shape', 'Pen', 'Table', 'Media'];
-    const medium = await toolbarAt(1200, (layout) => layout.fileVisible
+    const medium = await toolbarAt(1260, (layout) => layout.fileVisible
       && layout.classes.includes('toolbar-hide-deck-name'));
     expect(medium.height).toBe(44);
     expect(medium.classes).not.toContain('toolbar-compact-file');
@@ -107,7 +108,7 @@ describe.skipIf(!electronBinary)('responsive desktop toolbar', () => {
     const fits = (layout: ToolbarLayout) => layout.leftRight <= layout.centerLeft
       && layout.centerRight <= layout.rightLeft;
     let compact: ToolbarLayout | null = null;
-    for (let width = 1180; width >= 600 && !compact; width -= 20) {
+    for (let width = 1240; width >= 600 && !compact; width -= 20) {
       const layout = await toolbarAt(width, fits);
       if (layout.classes.includes('toolbar-compact-secondary')) compact = layout;
     }

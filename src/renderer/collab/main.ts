@@ -11,6 +11,7 @@ import { CANVAS_NOTICE_EVENT, EditorCanvas } from '../editor/canvas.js';
 import { SpeakerNotesDrawer } from '../editor/speakerNotesDrawer.js';
 import { CanvasRulers } from '../editor/rulers.js';
 import { createDeckWerkButton } from '../editor/aboutDialog.js';
+import { createThemeToggle } from '../editor/themeToggle.js';
 import { setCommentAuthor, setCommentLinks } from '../editor/comments.js';
 import { findComment } from '@shared/comments.js';
 import { CssEditor } from '../editor/cssEditor.js';
@@ -1124,7 +1125,7 @@ function buildToolbar(): void {
     rename: renameDeck,
     onError: (message) => setStatusMessage(`Rename failed: ${message}`),
   });
-  left.append(createDeckWerkButton(), deckNameField.element, createHistoryButton(historyHost), divider());
+  left.append(createThemeToggle(), createDeckWerkButton(), deckNameField.element, createHistoryButton(historyHost), divider());
   const fileActions = document.createElement('span');
   fileActions.className = 'toolbar-expanded-file-actions';
   const compactFileEntries: ToolbarPickerEntry[] = [];

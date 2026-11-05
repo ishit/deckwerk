@@ -4574,6 +4574,22 @@ button.cthread-where:disabled { cursor: default; opacity: 1; }
 
 /* --- DeckWerk identity and About dialog --- */
 
+/* Light/dark switch at the toolbar's leading edge, before the wordmark. */
+.theme-toggle {
+  display: inline-grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.theme-toggle .bar-icon { color: var(--muted); }
+.theme-toggle:not(:disabled):hover { background: var(--panel-2); }
+.theme-toggle:not(:disabled):hover .bar-icon { color: var(--text); }
+.theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .brand-button {
   flex: none;
   margin-right: 7px;

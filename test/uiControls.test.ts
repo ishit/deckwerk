@@ -9,6 +9,8 @@ import {
 } from '../src/renderer/editor/exportPicker.js';
 import { showPdfExportDialog } from '../src/renderer/editor/pdfExportDialog.js';
 import { createDeckWerkButton } from '../src/renderer/editor/aboutDialog.js';
+import { createThemeToggle } from '../src/renderer/editor/themeToggle.js';
+import { setUiThemePreference } from '../src/renderer/uiTheme.js';
 import { showPasteThemeDialog } from '../src/renderer/editor/pasteThemeDialog.js';
 import { refreshResponsiveToolbar } from '../src/renderer/editor/responsiveToolbar.js';
 
@@ -70,6 +72,31 @@ describe('shared editor controls', () => {
     expect(document.documentElement.dataset.uiTheme).toBe('light');
     open();
     expect(radios()).toEqual(['System:false', 'Light:true', 'Dark:false', ...sizes]);
+    localStorage.removeItem('deckwerk.uiTheme');
+  });
+
+  it('flips light and dark from the toolbar toggle, and follows a change made elsewhere', async () => {
+    localStorage.removeItem('deckwerk.uiTheme');
+    delete document.documentElement.dataset.uiTheme;
+    const toggle = createThemeToggle();
+    document.body.appendChild(toggle);
+    // jsdom has no matchMedia, so System resolves to dark.
+    expect(document.documentElement.dataset.uiTheme).toBe('dark');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to light theme');
+
+    toggle.click();
+    expect(document.documentElement.dataset.uiTheme).toBe('light');
+    expect(localStorage.getItem('deckwerk.uiTheme')).toBe('light');
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to dark theme');
+
+    toggle.click();
+    expect(document.documentElement.dataset.uiTheme).toBe('dark');
+    expect(localStorage.getItem('deckwerk.uiTheme')).toBe('dark');
+
+    // Choosing Light from the DeckWerk menu updates the toggle too.
+    setUiThemePreference('light');
+    await Promise.resolve();
+    expect(toggle.getAttribute('aria-label')).toBe('Switch to dark theme');
     localStorage.removeItem('deckwerk.uiTheme');
   });
 
