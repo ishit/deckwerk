@@ -68,6 +68,22 @@ describe('assets the app needs at run time', () => {
     expect(editorCss).toContain('./fonts/Monaspace-Krypton-Var.woff2');
     expect(editorCss).toContain('--mono: "Monaspace Krypton", monospace;');
     expect(existsSync(join(process.cwd(), 'src/renderer/editor/fonts/Monaspace-Krypton-Var.woff2'))).toBe(true);
+  });
+
+  it('bundles Inter, with its licence, for the editor chrome', async () => {
+    for (const file of ['src/renderer/appChrome.css', 'src/renderer/editor/editor.css']) {
+      const css = await readFile(join(process.cwd(), file), 'utf8');
+      expect(css).toContain('font-family: "Inter";');
+      expect(css).toContain('/InterVariable.woff2');
+      expect(css).toContain('--ui: "Inter", system-ui');
+      expect(css).toMatch(/html, body \{[^}]*font: 13px\/1\.5 var\(--ui\)/);
+    }
+    for (const asset of ['InterVariable.woff2', 'LICENSE-Inter.txt']) {
+      expect(existsSync(join(process.cwd(), 'src/renderer/editor/fonts', asset))).toBe(true);
+    }
+  });
+
+  it('draws the app icon wordmark in Monaspace Krypton', async () => {
 
     const icon = await readFile(join(process.cwd(), 'resources/deckwerk-icon.svg'), 'utf8');
     expect(icon).toContain('font-family="Monaspace Krypton"');
