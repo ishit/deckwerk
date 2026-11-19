@@ -1891,15 +1891,17 @@ input[type="range"] { accent-color: var(--accent); padding: 0; background: trans
 .text-selection-style { display: grid; gap: 6px; margin: 4px 0 8px; }
 .text-selection-style .button-row { display: grid; gap: 4px; }
 .text-selection-style button { padding: 5px 2px; font-size: 10px; }
-.text-selection-style .text-format-buttons { grid-template-columns: repeat(6, 1fr); }
+.text-selection-style .text-format-buttons { grid-template-columns: repeat(7, 1fr); }
 .text-format-bold { font-weight: 800; }
 .text-format-italic { font-style: italic; }
 .text-format-underline { text-decoration: underline; }
 .text-format-strikethrough { text-decoration: line-through; }
 /* The glyph pair "x²"/"x₂" already carries the meaning; keep it from
-   crowding the narrower six-across row. */
+   crowding the narrower seven-across row. */
 .text-format-superscript,
 .text-format-subscript { letter-spacing: -0.02em; }
+.text-format-link { display: inline-flex; align-items: center; justify-content: center; }
+.text-format-link svg { flex: none; }
 .text-format-buttons button[aria-pressed="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 24%, var(--panel-2));
@@ -2295,7 +2297,7 @@ button, .bar-select, .field input, .field select, .field textarea, .media-effect
 .insp-group, .step-block, .rail-item, .rail-thumb, .handle, .timeline-row select,
 .timeline-row input, #side-tabs button, .crop-size,
 .agent-history-dialog, .agent-history-message, .agent-chat-panel, .agent-scratchpad-panel,
-.color-picker-popover, #comments-popover, .workflow-dialog, .morph-modal {
+.color-picker-popover, #comments-popover, .workflow-dialog, .morph-modal, .link-popover {
   border-radius: 0 !important;
 }
 
@@ -2486,6 +2488,38 @@ input[type="range"] { accent-color: var(--accent); border: 0; background: transp
 
 /* The element being typed into (see the marquee above). */
 .element.editing { outline-color: var(--accent); box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--accent) 14%, transparent); }
+
+/* A link on the editing canvas is text, not a way out: a plain click selects
+   or edits it (Cmd/Ctrl+click opens it), so it keeps the text's cursor rather
+   than the hand that promises navigation. */
+.slide-layer a[href] { cursor: inherit; }
+
+/* The link form: add, change or remove the link on the text being edited
+   (linkPopover.ts). Same surface as the colour picker; the shared field and
+   button styles do the rest. */
+.link-popover {
+  position: fixed;
+  z-index: 10020;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 45%);
+}
+/* Over the focus ring too: the refused address keeps focus so it can be fixed. */
+.link-popover .field input[aria-invalid="true"],
+.link-popover .field input[aria-invalid="true"]:focus { border-color: var(--danger); }
+.link-popover-problem {
+  color: var(--danger);
+  font: 11px/1.3 var(--ui);
+}
+.link-popover-problem:empty { display: none; }
+.link-popover-actions { display: flex; gap: 6px; align-items: center; }
+.link-popover-actions .spacer { flex: 1; }
 
 /* Colour picker: theme palette and full RGBA controls open in one popover. */
 .field-color { flex-direction: row; align-items: center; gap: 8px; }
@@ -4980,7 +5014,7 @@ button.cthread-where:disabled { cursor: default; opacity: 1; }
   margin-bottom: 6px;
 }
 .text-style-row > .field { margin-bottom: 0; min-width: 0; }
-.text-selection-style .text-format-buttons { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.text-selection-style .text-format-buttons { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .text-selection-style button { height: 26px; padding: 0; }
 .field-color.field-color-stacked { flex-direction: column; align-items: stretch; gap: 3px; }
 .field-color-stacked .color-picker-trigger { width: 100%; height: 26px; }
@@ -5548,7 +5582,7 @@ button.ghost:hover:not(:disabled) { color: var(--text); background: transparent;
 /* Interface size in the browser editor (uiScale.ts): the chrome is zoomed and
    the slide canvas is not, so pointer maths on the canvas stay exact. */
 :root[data-ui-zoom] :is(#toolbar, #rail, #side, #status, .ui-menu, .ui-help-popover, .panel-popover,
-  .color-picker-popover, .workflow-dialog, .canvas-host > .zoom-controls, .canvas-host > .notes-toggle,
+  .color-picker-popover, .link-popover, .workflow-dialog, .canvas-host > .zoom-controls, .canvas-host > .notes-toggle,
   .canvas-host > .objects-toggle, .canvas-host > .objects-drawer) { zoom: var(--ui-zoom); }
 
 /* --- Code blocks on the canvas ----------------------------------------- */

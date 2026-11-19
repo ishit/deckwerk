@@ -242,7 +242,10 @@ describe('text formatting from the inspector controls', () => {
       'Size box to text', 'Auto-fit text to box', 'Disable automatic line breaks', 'List',
       'Indent', 'Align', 'Vertical', 'Paragraph spacing', 'Line spacing',
     ]);
-    expect(labels('.text-format-buttons button')).toEqual(['B', 'I', 'U', 'S', 'x²', 'x₂']);
+    expect(labels('.text-format-buttons button')).toEqual(['B', 'I', 'U', 'S', 'x²', 'x₂', '']);
+    // The link button is an icon: its name is its label.
+    expect(normal.inspectorHost.querySelector('.text-format-buttons button:last-child')
+      ?.getAttribute('aria-label')).toBe('Link');
     expect(labels('.number-step-buttons button'))
       .toEqual(['▲', '▼', '▲', '▼', '▲', '▼', '▲', '▼']);
 

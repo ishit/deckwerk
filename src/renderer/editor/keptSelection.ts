@@ -32,6 +32,7 @@ export const TEXT_EDIT_PANEL_CHROME = [
   '.text-table-options',
   '.text-list-toggle',
   '.color-picker-popover',
+  '.link-popover',
 ].join(', ');
 
 /** Everything the rule reads, sampled at one moment. */

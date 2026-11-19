@@ -40,9 +40,10 @@ export function closePopover(): void {
   }
 }
 
-function placePopover(popover: HTMLElement, anchor: HTMLElement, beside?: Element | null): void {
+type ScreenBox = Pick<DOMRect, 'left' | 'top' | 'bottom'>;
+
+function placePopover(popover: HTMLElement, anchorRect: ScreenBox, beside?: Element | null): void {
   document.body.appendChild(popover);
-  const anchorRect = anchor.getBoundingClientRect();
   const rect = popover.getBoundingClientRect();
   if (beside) {
     // Outside the panel, level with the control, so the panel's other rows
@@ -64,12 +65,13 @@ function placePopover(popover: HTMLElement, anchor: HTMLElement, beside?: Elemen
   popover.style.top = `${top}px`;
 }
 
-function bindDismiss(popover: HTMLElement, anchor: HTMLElement): void {
+function bindDismiss(popover: HTMLElement, anchor: HTMLElement | null): void {
   activePopover = popover;
-  anchor.setAttribute('aria-expanded', 'true');
+  anchor?.setAttribute('aria-expanded', 'true');
   popover.addEventListener('pointerdown', (event) => event.stopPropagation());
   activeDismiss = (event) => {
-    if (event.target instanceof Node && (popover.contains(event.target) || anchor.contains(event.target))) return;
+    if (event.target instanceof Node
+      && (popover.contains(event.target) || anchor?.contains(event.target))) return;
     closePopover();
   };
   setTimeout(() => activeDismiss && document.addEventListener('pointerdown', activeDismiss, true), 0);
@@ -90,13 +92,33 @@ export function openAnchoredPopover(
   } = {},
 ): void {
   closePopover();
-  placePopover(popover, anchor, options.beside);
+  placePopover(popover, anchor.getBoundingClientRect(), options.beside);
   bindDismiss(popover, anchor);
   if (options.focus !== false) {
     popover.querySelector<HTMLElement>(
       'button:not(:disabled), input:not(:disabled), [tabindex="0"]',
     )?.focus();
   }
+}
+
+/**
+ * The same popover, opened under a place on screen that is not a control —
+ * the text an author has selected on the canvas. `trigger`, when the popover
+ * was asked for from a control, is marked expanded and does not dismiss it.
+ */
+export function openPopoverAtRect(
+  rect: ScreenBox,
+  popover: HTMLElement,
+  options: { trigger?: HTMLElement | null } = {},
+): void {
+  closePopover();
+  placePopover(popover, rect);
+  bindDismiss(popover, options.trigger ?? null);
+}
+
+/** Whether `popover` is the one open now. */
+export function isPopoverOpen(popover: HTMLElement): boolean {
+  return activePopover === popover && popover.isConnected;
 }
 
 export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
@@ -131,7 +153,7 @@ export function openMenu(anchor: HTMLElement, items: MenuItem[]): void {
     });
     menu.appendChild(row);
   }
-  placePopover(menu, anchor);
+  placePopover(menu, anchor.getBoundingClientRect());
   bindDismiss(menu, anchor);
   menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   menu.addEventListener('keydown', (event) => {
@@ -174,7 +196,7 @@ export function helpButton(content: HelpContent): HTMLButtonElement {
     first.className = 'ui-help-first';
     first.textContent = `Start here: ${content.firstAction}`;
     popover.append(title, description, first);
-    placePopover(popover, help);
+    placePopover(popover, help.getBoundingClientRect());
     bindDismiss(popover, help);
   }, { variant: 'quiet', className: 'ui-help-button' });
   help.dataset.helpId = `help-${Math.random().toString(36).slice(2)}`;

@@ -106,6 +106,8 @@ export function wireCanvasInspector(
     targetsTableCells()
       ? canvas.tableCellTextFormatState(format)
       : canvas.textSelectionFormatState(format);
+  inspector.onEditTextLink = (trigger) => canvas.editTextSelectionLink(trigger);
+  inspector.textSelectionLinkState = () => canvas.textSelectionLinkState();
   inspector.onApplyTextSelectionFontFamily = (value) =>
     targetsTableCells()
       ? canvas.applyTableCellTextStyle('fontFamily', value || null)

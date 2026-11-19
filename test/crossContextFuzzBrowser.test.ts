@@ -32,7 +32,8 @@ import { sidebarSelectionProbes } from './support/selectionSession.js';
  * rulers), picking up the pen to put it down again or to draw a line
  * that is undone, a freehand Pencil stroke (Shift+P) that is undone, and
  * a line from the Shape menu whose points are opened with a double-click
- * and bent with Cmd/Ctrl-drag, then undone.
+ * and bent with Cmd/Ctrl-drag, then undone, and a typed word selected with
+ * Shift+Left and linked through the Cmd/Ctrl+K form (or the form escaped).
  *
  * After EVERY step five oracles run: the whole-editor invariant set from
  * selectionSession, keystroke routing via per-step nonce strings, an element
@@ -158,7 +159,7 @@ type OpName =
   | 'rail hop' | 'undo' | 'redo' | 'undo round-trip' | 'delete selection'
   | 'cmd+a' | 'click with stray hover' | 'rail multi-delete' | 'stack key' | 'spelling fix'
   | 'size from sidebar' | 'flip from sidebar' | 'viewport gesture' | 'pen abandoned' | 'pen line undone'
-  | 'pencil stroke undone' | 'line bent and undone';
+  | 'pencil stroke undone' | 'line bent and undone' | 'link typed word';
 
 interface Violation { seed: number; step: number; op: OpName; oracle: string; detail: string }
 
@@ -429,6 +430,7 @@ function chooseOp(next: () => number, pre: CrossState): OpName {
     add('click', 2); // click the other box mid-typing, no Escape first
     add('spelling fix', 1);
     add('size from sidebar', 2);
+    add('link typed word', 1);
   }
   add('escape', 1);
   add('click empty', 1);
@@ -851,6 +853,46 @@ async function performOp(
       if (await snapshot() !== before) {
         flag('undoRoundTrip', `undo after the confirmed slide deletion did not restore the deck: ${await snapshot()}`);
       }
+      return 'same';
+    }
+    case 'link typed word': {
+      // A word typed and selected with Shift+Left, then Cmd/Ctrl+K: the form
+      // takes the keyboard, so its address must not leak into the slide, and
+      // Enter (or Escape) hands the edit back — what is typed next lands in
+      // the same box.
+      const word = `k${uniqueToken()}`;
+      const tail = `n${uniqueToken()}z`;
+      await session.type(` ${word}`);
+      for (let i = 0; i < word.length; i++) await session.chord('ArrowLeft', 'ArrowLeft', 37, SHIFT);
+      await session.chord('k', 'KeyK', 75, MOD);
+      const form = () => session.cdp.evaluate<boolean>(`Boolean(document.querySelector('.link-popover'))`);
+      if (!await form()) {
+        flag('routing', `Cmd/Ctrl+K while editing ${pre.editing} opened no link form`);
+        return 'same';
+      }
+      const apply = next() < 0.7;
+      const href = `https://${word}.test`;
+      if (apply) {
+        await session.type(`${word}.test`);
+        await session.key('Enter', 13);
+      } else {
+        await session.key('Escape', 27);
+      }
+      if (await form()) flag('routing', `the link form stayed open after ${apply ? 'Enter' : 'Escape'}`);
+      if (apply && pre.editing) {
+        const linked = await session.cdp.evaluate<string | null>(`(() => {
+          const link = document.querySelector(${JSON.stringify(`[data-element-id="${pre.editing}"] .text-content a[href="${href}"]`)});
+          return link ? link.textContent.replaceAll('\u2060', '') : null;
+        })()`);
+        if (linked !== word) {
+          flag('routing', `linking "${word}" in ${pre.editing} left ${linked === null ? 'no link' : `a link on "${linked}"`}`);
+        }
+      }
+      await session.key('ArrowRight', 39);
+      await session.type(tail);
+      await wait(120);
+      await checkRouting(pre, word, flag);
+      await checkRouting(pre, tail, flag);
       return 'same';
     }
     case 'spelling fix': {

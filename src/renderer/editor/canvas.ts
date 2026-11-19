@@ -114,10 +114,15 @@ import {
 } from './listEditing.js';
 import {
   applyTypedLink,
+  insertLinkAtCaret,
   linkHrefForText,
   linkifySelection,
+  linkSelection,
+  selectionLinks,
   typedLinkAtCaret,
+  unlinkSelection,
 } from './linkEditing.js';
+import { closeLinkPopover, linkPopoverOpen, openLinkPopover } from './linkPopover.js';
 import {
   applyPendingHud,
   clearPending,
@@ -1246,10 +1251,18 @@ export class EditorCanvas {
 
     new ResizeObserver(() => this.rescale()).observe(this.host);
     this.bindPointer();
-    // Text edit mode restores raw authored markup, so its anchors may not carry
-    // the renderer-injected target yet. Intercept activation at the canvas edge
-    // and open it explicitly; this also keeps the authored HTML unmodified.
-    this.host.addEventListener('click', (event) => openSlideLinkInNewTab(event));
+    // In the editor a link is text being authored, as in Docs, Slides and
+    // PowerPoint: a click selects its box or puts the caret in it (to edit
+    // the words, or Cmd/Ctrl+K the address), and Cmd/Ctrl+click opens it.
+    // Presenting, a plain click still opens links. Rendered anchors carry
+    // target=_blank, so a plain click is stopped here or it would open a
+    // window; edit mode's raw anchors carry no target, so opening is
+    // explicit, which also leaves the authored HTML unmodified.
+    this.host.addEventListener('click', (event) => {
+      if (!slideLinkFromEvent(event)) return;
+      if (commandModifier(event)) openSlideLinkInNewTab(event);
+      else event.preventDefault();
+    });
     // The host clips (overflow: hidden) but can still be scrolled by
     // `focus()` or `scrollIntoView` on something inside it — the speaker notes
     // drawer, a text box being edited near the edge. The slide is placed by
@@ -2974,10 +2987,9 @@ export class EditorCanvas {
 
   private onPointerDown(ev: PointerEvent): void {
     if (ev.button !== 0) return;
-    // Authored links are interactive slide content. Let Chromium activate the
-    // prepared target=_blank link instead of turning the gesture into canvas
-    // selection (whose preventDefault would suppress navigation entirely).
-    if (slideLinkFromEvent(ev)) return;
+    // Cmd/Ctrl+click on a link opens it (the click handler above); keep the
+    // canvas out of that gesture. A plain press on a link is a press on text.
+    if (commandModifier(ev) && slideLinkFromEvent(ev)) return;
     const target = ev.target as HTMLElement;
     // The no-deck welcome screen lives inside the canvas host, but its buttons
     // are ordinary application controls. Capturing their pointer on the canvas
@@ -3932,15 +3944,24 @@ export class EditorCanvas {
     // Inside the box being edited the menu leads with spelling: fixes for the
     // flagged word under the pointer, then the on/off switch.
     const spelling = this.editingId ? this.spellingMenuItems(ev.clientX, ev.clientY) : [];
-    if (!this.contextActions && spelling.length === 0) return;
+    // Then the link at the caret or selection — offered only over the text
+    // it would act on.
+    const edited = this.editingId ? this.editedTextContent(this.editingId) : null;
+    const linking = edited && ev.target instanceof Node && edited.contains(ev.target)
+      ? this.linkMenuItems()
+      : [];
+    const textItems: ContextMenuEntry[] = linking.length
+      ? [...spelling, 'separator', ...linking]
+      : spelling;
+    if (!this.contextActions && textItems.length === 0) return;
 
     const hit = this.hitTest(this.toCanvas(ev as PointerEvent));
     if (hit && !this.store.get().selection.has(hit.id)) this.store.select([hit.id]);
 
     const actions = this.contextActions?.(hit) ?? [];
     const items: Array<ContextMenuEntry> = actions.length
-      ? [...spelling, 'separator', ...actions]
-      : spelling;
+      ? [...textItems, 'separator', ...actions]
+      : textItems;
     if (items.length === 0) return;
 
     const menu = document.createElement('div');
@@ -5208,6 +5229,8 @@ export class EditorCanvas {
       ended = true;
       this.textEditComposing = false;
       this.spelling.detach();
+      // The link form is about this edit's text; it has nothing left to act on.
+      closeLinkPopover();
       if (this.finishTextEdit === finish) this.finishTextEdit = null;
       if (this.sealTextChunk === sealTextChunk) this.sealTextChunk = null;
       if (idleSeal) {
@@ -5647,6 +5670,11 @@ export class EditorCanvas {
         // of Cut.
         e.preventDefault();
         this.toggleTextSelectionFormat('strikethrough');
+      } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        // Add or edit a link: Cmd/Ctrl+K in Docs, Slides, Keynote and
+        // PowerPoint alike. By character, like Cmd/Ctrl+B, I and U.
+        e.preventDefault();
+        this.editTextSelectionLink();
       } else if (this.handleZoomShortcut(e)) {
         // The unshifted chords zoom the canvas here too: they mean nothing to
         // the text, and would otherwise zoom the whole page.
@@ -6951,6 +6979,144 @@ export class EditorCanvas {
     );
   }
 
+  /** The `.text-content` of the box being edited, while `elementId` is the one. */
+  private editedTextContent(elementId: string): HTMLElement | null {
+    if (this.editingId !== elementId) return null;
+    return this.slideLayer.querySelector<HTMLElement>(
+      `[data-element-id="${CSS.escape(elementId)}"] .text-content`,
+    );
+  }
+
+  /**
+   * Whether the caret or selection in the box being edited is in a link, and
+   * the address it would edit. Null outside an edit.
+   */
+  textSelectionLinkState(): { linked: boolean; href: string | null } | null {
+    const content = this.editingId ? this.editedTextContent(this.editingId) : null;
+    const range = content ? this.activeTextRange(content) : null;
+    if (!content || !range) return null;
+    const links = selectionLinks(content, range);
+    return { linked: links.covered.length > 0, href: links.href };
+  }
+
+  /**
+   * Open the link form for what is selected in the box being edited —
+   * Cmd/Ctrl+K, the inspector's link button, the text context menu. Selected
+   * characters get exactly the address typed; a bare caret in a link edits
+   * that whole link; a bare caret anywhere else asks for the words as well
+   * and inserts them. Asked again while the form is open, it closes it.
+   */
+  editTextSelectionLink(trigger: HTMLElement | null = null): boolean {
+    const elementId = this.editingId;
+    if (!elementId) return false;
+    if (linkPopoverOpen()) {
+      closeLinkPopover();
+      return true;
+    }
+    const content = this.editedTextContent(elementId);
+    if (!content) return false;
+    // What was typed so far is its own undo step, not part of the link.
+    this.sealTextChunk?.();
+    const range = this.activeTextRange(content);
+    if (!range || !content.contains(range.commonAncestorContainer)) return false;
+    // By block, not by flat offset: the end of one paragraph and the start of
+    // the next are the same flat offset (caretPath.ts).
+    const bookmark = textBookmark(content, TEXT_BLOCKS, range);
+    if (!bookmark) return false;
+    const links = selectionLinks(content, range);
+    // The form takes focus; the bookmark keeps the words it is about
+    // highlighted (keptSelection.ts) and is what Escape returns to.
+    this.textSelectionRange = range.cloneRange();
+    openLinkPopover({
+      rect: this.textRangeRect(content, range),
+      trigger,
+      href: links.href,
+      canRemove: links.covered.length > 0,
+      askText: range.collapsed && !links.caretLink,
+      onApply: (href, text) => this.applyTextLink(elementId, bookmark, href, text),
+      onRemove: () => this.removeTextLink(elementId, bookmark),
+      onOpen: (href) => {
+        window.open(href, '_blank', 'noopener');
+      },
+      onCancel: () => this.returnToEditedText(elementId, bookmark),
+    });
+    this.keptSelection.schedule();
+    return true;
+  }
+
+  /** Where a text range is on screen, falling back to its box for a caret with no line box. */
+  private textRangeRect(content: HTMLElement, range: Range): { left: number; top: number; bottom: number } {
+    const lines = [...range.getClientRects()].filter((rect) => rect.width > 0 || rect.height > 0);
+    const rect = range.collapsed ? lines[0] ?? null : range.getBoundingClientRect();
+    if (rect && (rect.width > 0 || rect.height > 0)) {
+      return { left: rect.left, top: rect.top, bottom: rect.bottom };
+    }
+    const box = content.getBoundingClientRect();
+    return { left: box.left, top: box.top, bottom: box.bottom };
+  }
+
+  /** Put the author back in the text, with the selection the link form was about. */
+  private returnToEditedText(elementId: string, bookmark: TextBookmark): void {
+    const content = this.editedTextContent(elementId);
+    if (!content) return;
+    if (document.activeElement !== content) content.focus({ preventScroll: true });
+    this.restoreTextBookmark(content, bookmark);
+    this.keptSelection.schedule();
+  }
+
+  /** The link form's Apply: one undo entry, with the selection kept. */
+  private applyTextLink(
+    elementId: string,
+    bookmark: TextBookmark,
+    href: string,
+    text: string | null,
+  ): void {
+    const content = this.editedTextContent(elementId);
+    if (!content) return;
+    this.returnToEditedText(elementId, bookmark);
+    const range = this.activeTextRange(content);
+    if (!range) return;
+    const { caretLink, covered } = selectionLinks(content, range);
+    let label: string;
+    if (range.collapsed && caretLink) {
+      if (caretLink.getAttribute('href') === href) return;
+      caretLink.setAttribute('href', href);
+      label = 'Edit link';
+    } else if (range.collapsed) {
+      const anchor = insertLinkAtCaret(content, range, href, text || href);
+      if (!anchor) return;
+      // As after a typed URL: the caret goes after the link, so what is
+      // typed next is not part of it.
+      const caret = document.createRange();
+      caret.setStartAfter(anchor);
+      caret.collapse(true);
+      this.selectTextRange(content, caret);
+      label = 'Insert link';
+    } else {
+      // The words are unchanged, so the same bookmark selects them again.
+      const words = textBookmark(content, TEXT_BLOCKS, range);
+      if (linkSelection(content, range, href).length === 0) return;
+      if (words) this.restoreTextBookmark(content, words);
+      label = covered.length > 0 ? 'Edit link' : 'Insert link';
+    }
+    this.commitLiveTextDom(label);
+    this.onTextFormatStateChange?.();
+  }
+
+  /** The link form's Remove link: the selected text, or the whole link at a caret. */
+  private removeTextLink(elementId: string, bookmark: TextBookmark): void {
+    const content = this.editedTextContent(elementId);
+    if (!content) return;
+    this.returnToEditedText(elementId, bookmark);
+    const range = this.activeTextRange(content);
+    if (!range) return;
+    const words = textBookmark(content, TEXT_BLOCKS, range);
+    if (!unlinkSelection(content, range)) return;
+    if (words) this.restoreTextBookmark(content, words);
+    this.commitLiveTextDom('Remove link');
+    this.onTextFormatStateChange?.();
+  }
+
   textSelectionFormatState(format: InlineTextFormat): boolean {
     if (!this.editingId) return false;
     const content = this.slideLayer.querySelector<HTMLElement>(
@@ -7386,6 +7552,35 @@ export class EditorCanvas {
     );
     if (body && authoredTextHtml(body) !== this.textEditStoreBase) this.commitLiveTextDom('Edit text');
     return false;
+  }
+
+  /** Right-click entries for the link at the caret or selection in the box being edited. */
+  private linkMenuItems(): ContextMenuEntry[] {
+    const state = this.textSelectionLinkState();
+    if (!state) return [];
+    const items: ContextMenuEntry[] = [{
+      label: state.linked ? 'Edit link…' : 'Add link…',
+      action: () => this.editTextSelectionLink(),
+    }];
+    const { href } = state;
+    if (href) {
+      items.push({ label: 'Open link', action: () => window.open(href, '_blank', 'noopener') });
+    }
+    if (state.linked) items.push({ label: 'Remove link', action: () => this.removeTextSelectionLink() });
+    return items;
+  }
+
+  /** Remove the link from the selection (or the caret's whole link) without the form. */
+  private removeTextSelectionLink(): boolean {
+    const elementId = this.editingId;
+    if (!elementId) return false;
+    this.sealTextChunk?.();
+    const content = this.editedTextContent(elementId);
+    const range = content ? this.activeTextRange(content) : null;
+    const bookmark = content && range ? textBookmark(content, TEXT_BLOCKS, range) : null;
+    if (!bookmark) return false;
+    this.removeTextLink(elementId, bookmark);
+    return true;
   }
 
   /** Right-click entries for the flagged word at a point, plus the switch. */

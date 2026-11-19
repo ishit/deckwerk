@@ -34,6 +34,16 @@
   word-break: break-word;
 }
 
+/* A link reads as the deck's own text, underlined: its colour is the theme's,
+   or whatever colour the author gave those words — never the browser's blue,
+   which vanished on a dark theme, nor its visited purple, which depended on
+   the presenting machine's history. `:where` keeps this below any rule a
+   theme writes for its links. */
+:where(.text-body) a {
+  color: inherit;
+  text-decoration-line: underline;
+}
+
 /* Auto-fit has a 6px readability floor. Pathologically long unbroken content
    is clipped at that floor rather than painting over neighbouring objects. */
 .element-text[data-auto-fit="true"] .text-body,
